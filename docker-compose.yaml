@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:18.0
+    restart: always
+    environment:
+          POSTGRES_USER: "user"
+          POSTGRES_PASSWORD: "pass"
+          POSTGRES_DB: "tasks"
+    ports:
+      - "54321:5432"
+    volumes:
+      - task_volume:/var/lib/postgresql
+
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_USER: "guest"
+      RABBITMQ_PASSWORD: "guest"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes: 
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  task_volume: {}
+  rabbitmq_data: {}
+
+
