@@ -19,7 +19,7 @@ func NewTaskAuditRepository(db *pgxpool.Pool) *TaskAuditRepository {
 
 func (r *TaskAuditRepository) Create(ctx context.Context, audit *models.TaskAudit) error {
 	query := `
-	INSERT INTO "task_audit" (user_id, actions, entity_type, entity_id, old_values, new_values, changes)
+	INSERT INTO "task_audit" (user_id, action, entity_type, entity_id, old_values, new_values, changes)
 	VALUES ($1,$2,$3,$4,$5,$6,$7)
 	RETURNING id, changed_at
 	`
