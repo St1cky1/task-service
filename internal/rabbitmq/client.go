@@ -46,6 +46,16 @@ func NewRabbitMQClient(url string) (*Client, error) {
 	}, nil
 }
 
+// GetChannel возвращает AMQP channel для использования в consumer'ах
+func (c *Client) GetChannel() *amqp.Channel {
+	return c.channel
+}
+
+// GetQueueName возвращает имя очереди
+func (c *Client) GetQueueName() string {
+	return c.queue.Name
+}
+
 func (c *Client) PublishAuditMessage(ctx context.Context, message *models.AuditMessage) error {
 	body, err := json.Marshal(message)
 	if err != nil {
