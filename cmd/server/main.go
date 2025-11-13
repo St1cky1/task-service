@@ -75,7 +75,7 @@ func main() {
 	defer workerCancel()
 
 	go func() {
-		fmt.Println("👷 Запуск Audit Worker...")
+		fmt.Println("Запуск Audit Worker...")
 		auditWorker.Start(workerCtx)
 	}()
 
@@ -87,12 +87,12 @@ func main() {
 	// Запускаем HTTP сервер
 	go startHTTPServer(taskService)
 
-	fmt.Println("🎉 Сервисный слой с RabbitMQ работает!")
-	fmt.Println("🌐 HTTP API доступен на http://localhost:8080")
-	fmt.Println("👀 RabbitMQ Management: http://localhost:15672")
-	fmt.Println("👷 Audit Worker запущен и ожидает сообщения...")
-	fmt.Println("🔄 Непрерывная генерация задач запущена...")
-	fmt.Println("⏹️  Для остановки нажмите Ctrl+C")
+	fmt.Println("Сервисный слой с RabbitMQ работает!")
+	fmt.Println("HTTP API доступен на http://localhost:8080")
+	fmt.Println("RabbitMQ Management: http://localhost:15672")
+	fmt.Println("Audit Worker запущен и ожидает сообщения...")
+	fmt.Println("Непрерывная генерация задач запущена...")
+	fmt.Println("Для остановки нажмите Ctrl+C")
 
 	// Ждем сигнал завершения
 	waitForShutdown(workerCancel, taskGenCancel)
@@ -147,7 +147,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 			if taskCounter%3 == 0 {
 				// Обновляем задачу
 				updateReq := models.UpdateTaskRequest{
-					Title:  fmt.Sprintf("ОБНОВЛЕННАЯ задача #%d", taskCounter),
+					Title:  fmt.Sprintf("обновленная задача #%d", taskCounter),
 					Status: models.StatusCompleted,
 				}
 
@@ -155,7 +155,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 				if err != nil {
 					log.Printf("❌ Ошибка обновления авто-задачи: %v", err)
 				} else {
-					fmt.Printf("✏️  Обновлена авто-задача: %s (%s)\n", updatedTask.Title, updatedTask.Status)
+					fmt.Printf("Обновлена авто-задача: %s (%s)\n", updatedTask.Title, updatedTask.Status)
 				}
 			}
 
@@ -165,7 +165,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 				if err != nil {
 					log.Printf("❌ Ошибка удаления авто-задачи: %v", err)
 				} else {
-					fmt.Printf("🗑️  Удалена авто-задача: ID=%d\n", task.ID)
+					fmt.Printf("Удалена авто-задача: ID=%d\n", task.ID)
 				}
 			}
 
@@ -175,7 +175,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 				if err != nil {
 					log.Printf("❌ Ошибка получения списка задач: %v", err)
 				} else {
-					fmt.Printf("📊 Статистика: создано %d задач, в БД: %d задач\n",
+					fmt.Printf("Статистика: создано %d задач, в БД: %d задач\n",
 						taskCounter, len(tasks))
 				}
 			}
@@ -220,7 +220,7 @@ func startHTTPServer(taskService *service.TaskService) {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	fmt.Println("🌐 Запуск HTTP сервера на порту 8080...")
+	fmt.Println(" Запуск HTTP сервера на порту 8080...")
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("❌ Ошибка HTTP сервера: %v", err)
@@ -231,7 +231,7 @@ func waitForShutdown(workerCancel context.CancelFunc, taskGenCancel context.Canc
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	fmt.Println("⏳ Ожидаем сигнал завершения (Ctrl+C)...")
+	fmt.Println("Ожидаем сигнал завершения (Ctrl+C)...")
 	<-sigChan
 
 	fmt.Println("👋 Завершение работы...")

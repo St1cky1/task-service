@@ -3,7 +3,7 @@ module github.com/St1cky1/task-service
 go 1.25.4
 
 require (
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.0.8
 	github.com/golang-migrate/migrate/v4 v4.19.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/rabbitmq/amqp091-go v1.10.0

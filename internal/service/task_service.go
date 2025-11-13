@@ -221,7 +221,7 @@ func (s *TaskService) sendAuditMessage(
 		if err := s.rabbitMQ.PublishAuditMessage(context.Background(), auditMsg); err != nil {
 			log.Printf("❌ Ошибка отправки аудита в RabbitMQ: %v", err)
 		} else {
-			log.Printf("📨 Аудит отправлен в RabbitMQ: %s задача ID=%d", action, taskID)
+			log.Printf("Аудит отправлен в RabbitMQ: %s задача ID=%d", action, taskID)
 		}
 	}()
 }

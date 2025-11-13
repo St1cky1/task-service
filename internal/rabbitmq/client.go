@@ -79,7 +79,7 @@ func (c *Client) PublishAuditMessage(ctx context.Context, message *models.AuditM
 		return err
 	}
 
-	log.Printf("📨 Отправлено сообщение в RabbitMQ: %s для задачи ID=%d", message.Action, message.EntityID)
+	log.Printf("Отправлено сообщение в RabbitMQ: %s для задачи ID=%d", message.Action, message.EntityID)
 	return nil
 }
 

@@ -87,7 +87,7 @@ func (w *AuditWorker) Start(ctx context.Context) {
 			return
 		case msg, ok := <-msgs:
 			if !ok {
-				fmt.Println("📨 Канал сообщений закрыт")
+				fmt.Println("Канал сообщений закрыт")
 				return
 			}
 			w.processMessage(msg, channel)
@@ -98,7 +98,7 @@ func (w *AuditWorker) Start(ctx context.Context) {
 func (w *AuditWorker) processMessage(msg amqp.Delivery, channel *amqp.Channel) {
 	ctx := context.Background()
 
-	log.Printf("📥 Получено сообщение: %s", msg.Body)
+	log.Printf("Получено сообщение: %s", msg.Body)
 
 	// 1. Парсим сообщение
 	var auditMsg models.AuditMessage
