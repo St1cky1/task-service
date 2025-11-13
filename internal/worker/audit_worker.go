@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/St1cky1/task-service/internal/models"
 	"github.com/St1cky1/task-service/internal/rabbitmq"
@@ -26,7 +27,12 @@ func NewAuditWorker(rabbitMQ *rabbitmq.Client, auditRepo *repo.TaskAuditReposito
 
 func (w *AuditWorker) Start(ctx context.Context) {
 	// Создаем отдельное соединение и канал для consumer'а
-	rabbitMQURL := "amqp://guest:guest@localhost:5672/"
+
+	rabbitMQURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+		os.Getenv("RABBITMQ_USER"),
+		os.Getenv("RABBITMQ_PASSWORD"),
+		os.Getenv("RABBITMQ_HOST"),
+		os.Getenv("RABBITMQ_PORT"))
 	conn, err := amqp.Dial(rabbitMQURL)
 	if err != nil {
 		log.Printf("❌ Ошибка подключения к RabbitMQ для воркера: %v", err)

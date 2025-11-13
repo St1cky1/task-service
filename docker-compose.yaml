@@ -3,22 +3,21 @@ services:
     image: postgres:18.0
     restart: always
     environment:
-          POSTGRES_USER: "user"
-          POSTGRES_PASSWORD: "pass"
-          POSTGRES_DB: "tasks"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}" 
+      POSTGRES_DB: "${DB_NAME}"
     ports:
-      - "54321:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - task_volume:/var/lib/postgresql
-
 
   rabbitmq:
     image: rabbitmq:3.13-management
     environment:
-      RABBITMQ_USER: "guest"
-      RABBITMQ_PASSWORD: "guest"
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASS: "${RABBITMQ_PASSWORD}"
     ports:
-      - "5672:5672"
+      - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
     volumes: 
       - rabbitmq_data:/var/lib/rabbitmq
@@ -26,5 +25,3 @@ services:
 volumes:
   task_volume: {}
   rabbitmq_data: {}
-
-

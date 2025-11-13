@@ -23,9 +23,18 @@ import (
 )
 
 func main() {
-	dbURL := "postgresql://user:pass@localhost:54321/tasks?sslmode=disable"
-	rabbitMQURL := "amqp://guest:guest@localhost:5672/"
+	dbURL := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disable",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"))
 
+	rabbitMQURL := fmt.Sprintf("amqp://%s:%s@%s:%s/",
+		os.Getenv("RABBITMQ_USER"),
+		os.Getenv("RABBITMQ_PASSWORD"),
+		os.Getenv("RABBITMQ_HOST"),
+		os.Getenv("RABBITMQ_PORT"))
 	// Запускаем миграции
 	if err := runMigrations(dbURL); err != nil {
 		log.Fatal("❌ Ошибка миграций:", err)
