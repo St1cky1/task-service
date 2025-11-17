@@ -2,12 +2,12 @@ package api
 
 import (
 	"github.com/St1cky1/task-service/internal/api/handlers"
-	"github.com/St1cky1/task-service/internal/service"
+	"github.com/St1cky1/task-service/internal/usecase"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewRouter(taskService *service.TaskService) *chi.Mux {
+func NewRouter(taskService *usecase.TaskService) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -28,6 +28,6 @@ func NewRouter(taskService *service.TaskService) *chi.Mux {
 
 		})
 	})
-	return r
 
+	return r
 }

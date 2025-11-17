@@ -1,9 +1,9 @@
-package repo
+package repository
 
 import (
 	"context"
 
-	"github.com/St1cky1/task-service/internal/models"
+	"github.com/St1cky1/task-service/internal/entity"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,7 +17,7 @@ func NewTaskAuditRepository(db *pgxpool.Pool) *TaskAuditRepository {
 	}
 }
 
-func (r *TaskAuditRepository) Create(ctx context.Context, audit *models.TaskAudit) error {
+func (r *TaskAuditRepository) Create(ctx context.Context, audit *entity.TaskAudit) error {
 	query := `
 	INSERT INTO "task_audit" (user_id, action, entity_type, entity_id, old_values, new_values, changes)
 	VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -39,7 +39,7 @@ func (r *TaskAuditRepository) Create(ctx context.Context, audit *models.TaskAudi
 	return err
 }
 
-func (r *TaskAuditRepository) GetByTaskAuditId(ctx context.Context, taskAuditId int) ([]models.TaskAudit, error) {
+func (r *TaskAuditRepository) GetByTaskAuditId(ctx context.Context, taskAuditId int) ([]entity.TaskAudit, error) {
 	query := `
 	SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, changes, changed_at
 	FROM "task_audit"
@@ -52,9 +52,9 @@ func (r *TaskAuditRepository) GetByTaskAuditId(ctx context.Context, taskAuditId 
 	}
 	defer rows.Close()
 
-	var audits []models.TaskAudit
+	var audits []entity.TaskAudit
 	for rows.Next() {
-		var audit models.TaskAudit
+		var audit entity.TaskAudit
 		err := rows.Scan(
 			&audit.ID,
 			&audit.UserID,

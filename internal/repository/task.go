@@ -1,10 +1,10 @@
-package repo
+package repository
 
 import (
 	"context"
 	"strconv"
 
-	"github.com/St1cky1/task-service/internal/models"
+	"github.com/St1cky1/task-service/internal/entity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,7 +19,7 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	}
 }
 
-func (r *TaskRepository) Create(ctx context.Context, task *models.CreateTaskRequest) (*models.Task, error) {
+func (r *TaskRepository) Create(ctx context.Context, task *entity.CreateTaskRequest) (*entity.Task, error) {
 
 	query := `
 	INSERT INTO "task" (title, description, status, owner_id)
@@ -27,7 +27,7 @@ func (r *TaskRepository) Create(ctx context.Context, task *models.CreateTaskRequ
 	RETURNING id, title, description, status, owner_id, created_at, updated_at
 	`
 
-	var createdTask models.Task
+	var createdTask entity.Task
 	err := r.db.QueryRow(ctx, query,
 		task.Title,
 		task.Description,
@@ -49,19 +49,20 @@ func (r *TaskRepository) Create(ctx context.Context, task *models.CreateTaskRequ
 	return &createdTask, nil
 }
 
-func (r *TaskRepository) GetByTaskId(ctx context.Context, taskId int) (*models.Task, error) {
+func (r *TaskRepository) GetByTaskId(ctx context.Context, taskId int) (*entity.Task, error) {
 
 	query := `
-	SELECT id, title, description, owner_id, created_at, updated_at
+	SELECT id, title, description, status, owner_id, created_at, updated_at
 	FROM "task"
 	WHERE id = $1
 	`
-	var task models.Task
+	var task entity.Task
 
 	err := r.db.QueryRow(ctx, query, taskId).Scan(
 		&task.ID,
 		&task.Title,
 		&task.Description,
+		&task.Status,
 		&task.OwnerId,
 		&task.CreatedAt,
 		&task.UpdatedAt,
@@ -77,7 +78,7 @@ func (r *TaskRepository) GetByTaskId(ctx context.Context, taskId int) (*models.T
 }
 
 // Update - обновление задачи
-func (r *TaskRepository) Update(ctx context.Context, id int, updates map[string]interface{}) (*models.Task, error) {
+func (r *TaskRepository) Update(ctx context.Context, id int, updates map[string]interface{}) (*entity.Task, error) {
 	// Динамически строим SET часть запроса
 	setClause := ""
 	args := []interface{}{}
@@ -108,7 +109,7 @@ func (r *TaskRepository) Update(ctx context.Context, id int, updates map[string]
     `
 	args = append(args, id)
 
-	var task models.Task
+	var task entity.Task
 	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&task.ID,
 		&task.Title,
@@ -134,7 +135,7 @@ func (r *TaskRepository) Delete(ctx context.Context, id int) error {
 }
 
 // List - список задач с фильтрацией
-func (r *TaskRepository) List(ctx context.Context, ownerID int, status string) ([]models.Task, error) {
+func (r *TaskRepository) List(ctx context.Context, ownerID int, status string) ([]entity.Task, error) {
 	query := `
         SELECT id, title, description, status, owner_id, created_at, updated_at 
         FROM task 
@@ -155,9 +156,9 @@ func (r *TaskRepository) List(ctx context.Context, ownerID int, status string) (
 	}
 	defer rows.Close()
 
-	var tasks []models.Task
+	var tasks []entity.Task
 	for rows.Next() {
-		var task models.Task
+		var task entity.Task
 		err := rows.Scan(
 			&task.ID,
 			&task.Title,

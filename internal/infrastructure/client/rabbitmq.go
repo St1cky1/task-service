@@ -1,21 +1,21 @@
-package rabbitmq
+package client
 
 import (
 	"context"
 	"encoding/json"
 	"log"
 
-	"github.com/St1cky1/task-service/internal/models"
+	"github.com/St1cky1/task-service/internal/entity"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type Client struct {
+type RabbitMQClient struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
 	queue   amqp.Queue
 }
 
-func NewRabbitMQClient(url string) (*Client, error) {
+func NewRabbitMQClient(url string) (*RabbitMQClient, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func NewRabbitMQClient(url string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
+	return &RabbitMQClient{
 		conn:    conn,
 		channel: channel,
 		queue:   queue,
@@ -47,16 +47,16 @@ func NewRabbitMQClient(url string) (*Client, error) {
 }
 
 // GetChannel возвращает AMQP channel для использования в consumer'ах
-func (c *Client) GetChannel() *amqp.Channel {
+func (c *RabbitMQClient) GetChannel() *amqp.Channel {
 	return c.channel
 }
 
 // GetQueueName возвращает имя очереди
-func (c *Client) GetQueueName() string {
+func (c *RabbitMQClient) GetQueueName() string {
 	return c.queue.Name
 }
 
-func (c *Client) PublishAuditMessage(ctx context.Context, message *models.AuditMessage) error {
+func (c *RabbitMQClient) PublishAuditMessage(ctx context.Context, message *entity.AuditMessage) error {
 	body, err := json.Marshal(message)
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (c *Client) PublishAuditMessage(ctx context.Context, message *models.AuditM
 	return nil
 }
 
-func (c *Client) Close() error {
+func (c *RabbitMQClient) Close() error {
 	if c.channel != nil {
 		c.channel.Close()
 	}

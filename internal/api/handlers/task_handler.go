@@ -5,16 +5,16 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/St1cky1/task-service/internal/models"
-	"github.com/St1cky1/task-service/internal/service"
+	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/usecase"
 	"github.com/go-chi/chi/v5"
 )
 
 type TaskHandler struct {
-	taskService *service.TaskService
+	taskService *usecase.TaskService
 }
 
-func NewTaskHandler(taskService *service.TaskService) *TaskHandler {
+func NewTaskHandler(taskService *usecase.TaskService) *TaskHandler {
 	return &TaskHandler{
 		taskService: taskService,
 	}
@@ -23,7 +23,7 @@ func NewTaskHandler(taskService *service.TaskService) *TaskHandler {
 // создаем новую задачу
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
-	var req models.CreateTaskRequest
+	var req entity.CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil { // распарсиваем ответ в структурку
 		http.Error(w, "Invalid JSON", http.StatusBadRequest) // если ошибка, 400 выводим
 		return
@@ -35,10 +35,10 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 
-		case models.ErrUserNotFound:
+		case entity.ErrUserNotFound:
 			http.Error(w, "user not found", http.StatusNotFound) // 404
 
-		case models.ErrInvalidTaskData:
+		case entity.ErrInvalidTaskData:
 			http.Error(w, "invalid task data", http.StatusBadRequest) // 400
 		default:
 			http.Error(w, "Internal server error", http.StatusInternalServerError) // 500
@@ -64,16 +64,16 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		switch err {
-		case models.ErrTaskNotFound:
+		case entity.ErrTaskNotFound:
 			http.Error(w, "tack not found", http.StatusNotFound)
-		case models.ErrForbidden:
+		case entity.ErrForbidden:
 			http.Error(w, "Access denied", http.StatusForbidden)
 		default:
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
-	w.Header().Set("Context-Type", "aplication/json")
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)
 }
 
@@ -85,7 +85,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.UpdateTaskRequest
+	var req entity.UpdateTaskRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
@@ -97,18 +97,18 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	task, err := h.taskService.UpdateTask(r.Context(), taskId, userId, &req)
 	if err != nil {
 		switch err {
-		case models.ErrTaskNotFound:
+		case entity.ErrTaskNotFound:
 			http.Error(w, "task not found", http.StatusNotFound)
-		case models.ErrNoFieldsToUpdate:
+		case entity.ErrNoFieldsToUpdate:
 			http.Error(w, "no fields to update", http.StatusBadRequest)
-		case models.ErrForbidden:
+		case entity.ErrForbidden:
 			http.Error(w, "access denied", http.StatusForbidden)
 		default:
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
-	w.Header().Set("Context-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)
 }
 
@@ -124,9 +124,9 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	err = h.taskService.DeleteTask(r.Context(), taskId, userId)
 	if err != nil {
 		switch err {
-		case models.ErrTaskNotFound:
+		case entity.ErrTaskNotFound:
 			http.Error(w, "task not found", http.StatusNotFound)
-		case models.ErrForbidden:
+		case entity.ErrForbidden:
 			http.Error(w, "Access denied", http.StatusForbidden)
 		default:
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

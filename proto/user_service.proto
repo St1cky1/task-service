@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package user.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/St1cky1/task-service/proto/pb";
+
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (UserResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/users"
+      body: "*"
+    };
+  }
+  
+  rpc GetUser(GetUserRequest) returns (UserResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users/{id}"
+    };
+  }
+  
+  rpc UpdateUser(UpdateUserRequest) returns (UserResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/users/{id}"
+      body: "*"
+    };
+  }
+  
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/users/{id}"
+    };
+  }
+  
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/users"
+    };
+  }
+  
+  rpc UploadAvatar(stream UploadAvatarRequest) returns (UploadAvatarResponse);
+  
+  rpc DownloadAvatar(DownloadAvatarRequest) returns (stream DownloadAvatarResponse);
+}
+
+message CreateUserRequest {
+  string name = 1;
+}
+
+message GetUserRequest {
+  int32 id = 1;
+}
+
+message UpdateUserRequest {
+  int32 id = 1;
+  string name = 2;
+}
+
+message DeleteUserRequest {
+  int32 id = 1;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message ListUsersResponse {
+  repeated UserResponse users = 1;
+  int32 total = 2;
+}
+
+message UserResponse {
+  int32 id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+
+message UploadAvatarRequest {
+  int32 user_id = 1;
+  bytes data = 2;
+  string content_type = 3;
+}
+
+message UploadAvatarResponse {
+  bool success = 1;
+  string message = 2;
+  string avatar_url = 3;
+}
+
+message DownloadAvatarRequest {
+  int32 user_id = 1;
+}
+
+message DownloadAvatarResponse {
+  bytes data = 1;
+  string content_type = 2;
+}

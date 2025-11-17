@@ -7,18 +7,18 @@ import (
 	"log"
 	"os"
 
-	"github.com/St1cky1/task-service/internal/models"
-	"github.com/St1cky1/task-service/internal/rabbitmq"
-	"github.com/St1cky1/task-service/internal/repo"
+	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/client"
+	"github.com/St1cky1/task-service/internal/repository"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type AuditWorker struct {
-	rabbitMQ  *rabbitmq.Client
-	auditRepo *repo.TaskAuditRepository
+	rabbitMQ  *client.RabbitMQClient
+	auditRepo repository.ITaskAuditRepository
 }
 
-func NewAuditWorker(rabbitMQ *rabbitmq.Client, auditRepo *repo.TaskAuditRepository) *AuditWorker {
+func NewAuditWorker(rabbitMQ *client.RabbitMQClient, auditRepo repository.ITaskAuditRepository) *AuditWorker {
 	return &AuditWorker{
 		rabbitMQ:  rabbitMQ,
 		auditRepo: auditRepo,
@@ -101,7 +101,7 @@ func (w *AuditWorker) processMessage(msg amqp.Delivery, channel *amqp.Channel) {
 	log.Printf("Получено сообщение: %s", msg.Body)
 
 	// 1. Парсим сообщение
-	var auditMsg models.AuditMessage
+	var auditMsg entity.AuditMessage
 	if err := json.Unmarshal(msg.Body, &auditMsg); err != nil {
 		log.Printf("❌ Ошибка парсинга сообщения: %v", err)
 		msg.Nack(false, false) // Не возвращаем в очередь
@@ -128,7 +128,7 @@ func (w *AuditWorker) processMessage(msg amqp.Delivery, channel *amqp.Channel) {
 	log.Printf("✅ Аудит сохранен: %s задача ID=%d", taskAudit.Action, taskAudit.EntityID)
 }
 
-func (w *AuditWorker) convertToTaskAudit(msg *models.AuditMessage) (*models.TaskAudit, error) {
+func (w *AuditWorker) convertToTaskAudit(msg *entity.AuditMessage) (*entity.TaskAudit, error) {
 	// Конвертируем map[string]any в JSON строки
 	var oldValuesJSON, newValuesJSON, changesJSON *string
 
@@ -159,7 +159,7 @@ func (w *AuditWorker) convertToTaskAudit(msg *models.AuditMessage) (*models.Task
 		changesJSON = &changesStr
 	}
 
-	return &models.TaskAudit{
+	return &entity.TaskAudit{
 		UserID:     msg.UserID,
 		Action:     msg.Action,
 		EntityType: "task",

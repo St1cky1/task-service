@@ -7,15 +7,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
-	"github.com/St1cky1/task-service/internal/api"
-	"github.com/St1cky1/task-service/internal/models"
-	"github.com/St1cky1/task-service/internal/rabbitmq"
-	"github.com/St1cky1/task-service/internal/repo"
-	"github.com/St1cky1/task-service/internal/service"
-	"github.com/St1cky1/task-service/internal/worker"
+	grpcapi "github.com/St1cky1/task-service/internal/api/grpc"
+	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/client"
+	"github.com/St1cky1/task-service/internal/infrastructure/worker"
+	"github.com/St1cky1/task-service/internal/repository"
+	"github.com/St1cky1/task-service/internal/usecase"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -23,6 +24,8 @@ import (
 )
 
 func main() {
+	var wg sync.WaitGroup
+
 	dbURL := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disable",
 		os.Getenv("DB_USER"),
 		os.Getenv("DB_PASSWORD"),
@@ -54,7 +57,7 @@ func main() {
 	fmt.Println("✅ Подключение к БД установлено")
 
 	// Подключаемся к RabbitMQ
-	rabbitMQ, err := rabbitmq.NewRabbitMQClient(rabbitMQURL)
+	rabbitMQ, err := client.NewRabbitMQClient(rabbitMQURL)
 	if err != nil {
 		log.Fatal("❌ Ошибка подключения к RabbitMQ:", err)
 	}
@@ -62,19 +65,23 @@ func main() {
 	fmt.Println("✅ Подключение к RabbitMQ установлено")
 
 	// Инициализируем репозитории
-	userRepo := repo.NewUserRepository(db)
-	taskRepo := repo.NewTaskRepository(db)
-	taskAuditRepo := repo.NewTaskAuditRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
+	taskAuditRepo := repository.NewTaskAuditRepository(db)
+	avatarRepo := repository.NewAvatarRepository(db)
 
 	// Инициализируем сервисы
-	taskService := service.NewTaskService(taskRepo, userRepo, taskAuditRepo, rabbitMQ)
+	taskService := usecase.NewTaskService(taskRepo, userRepo, taskAuditRepo, rabbitMQ)
+	userService := usecase.NewUserService(userRepo, avatarRepo)
 
 	// Запускаем воркер для обработки аудит-сообщений
 	auditWorker := worker.NewAuditWorker(rabbitMQ, taskAuditRepo)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		fmt.Println("Запуск Audit Worker...")
 		auditWorker.Start(workerCtx)
 	}()
@@ -82,13 +89,49 @@ func main() {
 	// Запускаем непрерывную генерацию задач
 	taskGenCtx, taskGenCancel := context.WithCancel(context.Background())
 	defer taskGenCancel()
-	go continuousTaskGeneration(taskGenCtx, taskService, userRepo)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		continuousTaskGeneration(taskGenCtx, taskService, userRepo)
+	}()
 
-	// Запускаем HTTP сервер
-	go startHTTPServer(taskService)
+	// Запускаем gRPC сервер с обоими сервисами (Task и User)
+	grpcServer := grpcapi.NewGRPCServer(taskService, userService)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Println("Запуск gRPC сервера на порту 9090...")
+		fmt.Println("📋 TaskService и UserService готовы к работе!")
+		if err := grpcServer.Start("9090"); err != nil {
+			log.Printf("❌ gRPC server error: %v", err)
+		}
+	}()
 
-	fmt.Println("Сервисный слой с RabbitMQ работает!")
-	fmt.Println("HTTP API доступен на http://localhost:8080")
+	// Запускаем HTTP Gateway
+	gatewayCtx := context.Background()
+	gatewayHandler, err := grpcapi.NewGatewayHandler(gatewayCtx, "localhost:9090")
+	if err != nil {
+		log.Fatal("❌ Failed to create gateway:", err)
+	}
+
+	gatewayServer := &http.Server{
+		Addr:         ":8080",
+		Handler:      gatewayHandler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Println("Запуск gRPC Gateway на порту 8080...")
+		if err := gatewayServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("❌ HTTP Gateway error: %v", err)
+		}
+	}()
+
+	fmt.Println("✅ gRPC сервис и REST Gateway готовы к работе!")
 	fmt.Println("RabbitMQ Management: http://localhost:15672")
 	fmt.Println("Audit Worker запущен и ожидает сообщения...")
 	fmt.Println("Непрерывная генерация задач запущена...")
@@ -99,7 +142,7 @@ func main() {
 }
 
 // Непрерывная генерация задач
-func continuousTaskGeneration(ctx context.Context, taskService *service.TaskService, userRepo *repo.UserRepository) {
+func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskService, userRepo repository.IUserRepository) {
 	// Сначала создаем тестового пользователя
 	user := createOrGetTestUser(ctx, userRepo)
 	if user == nil {
@@ -108,11 +151,11 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 	}
 
 	taskCounter := 0
-	statuses := []models.TaskStatus{
-		models.StatusPending,
-		models.StatusInProgres,
-		models.StatusCompleted,
-		models.StatusCancelled,
+	statuses := []entity.TaskStatus{
+		entity.StatusPending,
+		entity.StatusInProgress,
+		entity.StatusCompleted,
+		entity.StatusCancelled,
 	}
 
 	for {
@@ -127,7 +170,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 			status := statuses[taskCounter%len(statuses)]
 
 			// Создаем задачу
-			taskReq := &models.CreateTaskRequest{
+			taskReq := &entity.CreateTaskRequest{
 				Title:       fmt.Sprintf("Авто-задача #%d", taskCounter),
 				Description: fmt.Sprintf("Сгенерирована автоматически в %s", time.Now().Format("15:04:05")),
 				Status:      status,
@@ -146,9 +189,9 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 			// Случайно обновляем или удаляем каждую 3-ю задачу
 			if taskCounter%3 == 0 {
 				// Обновляем задачу
-				updateReq := models.UpdateTaskRequest{
+				updateReq := entity.UpdateTaskRequest{
 					Title:  fmt.Sprintf("обновленная задача #%d", taskCounter),
-					Status: models.StatusCompleted,
+					Status: entity.StatusCompleted,
 				}
 
 				updatedTask, err := taskService.UpdateTask(ctx, task.ID, user.ID, &updateReq)
@@ -184,7 +227,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *service.TaskServ
 }
 
 // Создает или получает тестового пользователя
-func createOrGetTestUser(ctx context.Context, userRepo *repo.UserRepository) *models.User {
+func createOrGetTestUser(ctx context.Context, userRepo repository.IUserRepository) *entity.User {
 	// Пробуем получить пользователя с ID=1
 	user, err := userRepo.GetById(ctx, 1)
 	if err != nil {
@@ -198,7 +241,7 @@ func createOrGetTestUser(ctx context.Context, userRepo *repo.UserRepository) *mo
 	}
 
 	// Создаем нового пользователя
-	userReq := &models.CreateUserRequest{Name: "Auto-Generated User"}
+	userReq := &entity.CreateUserRequest{Name: "Auto-Generated User"}
 	user, err = userRepo.Create(ctx, userReq)
 	if err != nil {
 		log.Printf("❌ Ошибка создания пользователя: %v", err)
@@ -209,24 +252,6 @@ func createOrGetTestUser(ctx context.Context, userRepo *repo.UserRepository) *mo
 	return user
 }
 
-func startHTTPServer(taskService *service.TaskService) {
-	router := api.NewRouter(taskService)
-
-	server := &http.Server{
-		Addr:         ":8080",
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	fmt.Println(" Запуск HTTP сервера на порту 8080...")
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("❌ Ошибка HTTP сервера: %v", err)
-	}
-}
-
 func waitForShutdown(workerCancel context.CancelFunc, taskGenCancel context.CancelFunc) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -234,7 +259,7 @@ func waitForShutdown(workerCancel context.CancelFunc, taskGenCancel context.Canc
 	fmt.Println("Ожидаем сигнал завершения (Ctrl+C)...")
 	<-sigChan
 
-	fmt.Println("👋 Завершение работы...")
+	fmt.Println("Завершение работы...")
 
 	// Останавливаем воркер и генератор задач
 	workerCancel()

@@ -1,14 +1,14 @@
-package models
+package entity
 
 import "time"
 
 type TaskStatus string
 
 const (
-	StatusPending   TaskStatus = "pending"
-	StatusInProgres TaskStatus = "in_progres"
-	StatusCompleted TaskStatus = "completed"
-	StatusCancelled TaskStatus = "cancelled"
+	StatusPending    TaskStatus = "pending"
+	StatusInProgress TaskStatus = "in_progress"
+	StatusCompleted  TaskStatus = "completed"
+	StatusCancelled  TaskStatus = "cancelled"
 )
 
 type Task struct {
@@ -25,12 +25,12 @@ type Task struct {
 type CreateTaskRequest struct {
 	Title       string     `json:"title" validate:"required, min=1, max=255"`
 	Description string     `json:"description" validate:"required"`
-	Status      TaskStatus `json:"status" validate:"oneof=pending in_progres completed cancelled"`
+	Status      TaskStatus `json:"status" validate:"oneof=pending in_progress completed cancelled"`
 	OwnerId     int        `json:"owner_id" validate:"required, min=1"`
 }
 
 type UpdateTaskRequest struct {
-	Title       string     `json:"title" validate:"required, min=1, max=255"`
-	Description *string    `json:"description" validate:"required"` // проверяем пустая строка или не пердана
-	Status      TaskStatus `json:"status" validate:"oneof=pending in_progres completed cancelled"`
+	Title       string     `json:"title"`
+	Description *string    `json:"description"` // опциональное поле для обновления
+	Status      TaskStatus `json:"status"`
 }

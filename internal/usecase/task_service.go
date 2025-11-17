@@ -1,27 +1,31 @@
-package service
+package usecase
 
 import (
 	"context"
 	"log"
 	"time"
 
-	"github.com/St1cky1/task-service/internal/models"
-	"github.com/St1cky1/task-service/internal/rabbitmq"
-	"github.com/St1cky1/task-service/internal/repo"
+	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/repository"
 )
 
+// RabbitMQPublisher интерфейс для публикации в RabbitMQ
+type RabbitMQPublisher interface {
+	PublishAuditMessage(ctx context.Context, message *entity.AuditMessage) error
+}
+
 type TaskService struct {
-	taskRepo  *repo.TaskRepository
-	userRepo  *repo.UserRepository
-	auditRepo *repo.TaskAuditRepository
-	rabbitMQ  *rabbitmq.Client
+	taskRepo  repository.ITaskRepository
+	userRepo  repository.IUserRepository
+	auditRepo repository.ITaskAuditRepository
+	rabbitMQ  RabbitMQPublisher
 }
 
 func NewTaskService(
-	taskRepo *repo.TaskRepository,
-	userRepo *repo.UserRepository,
-	auditRepo *repo.TaskAuditRepository,
-	rabbitMQ *rabbitmq.Client,
+	taskRepo repository.ITaskRepository,
+	userRepo repository.IUserRepository,
+	auditRepo repository.ITaskAuditRepository,
+	rabbitMQ RabbitMQPublisher,
 ) *TaskService {
 	return &TaskService{
 		taskRepo:  taskRepo,
@@ -31,14 +35,14 @@ func NewTaskService(
 	}
 }
 
-func (s *TaskService) CreateTask(ctx context.Context, req *models.CreateTaskRequest, userID int) (*models.Task, error) {
+func (s *TaskService) CreateTask(ctx context.Context, req *entity.CreateTaskRequest, userID int) (*entity.Task, error) {
 	// 1. Проверяем что пользователь существует
 	user, err := s.userRepo.GetById(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
-		return nil, models.ErrUserNotFound
+		return nil, entity.ErrUserNotFound
 	}
 
 	// 2. Устанавливаем владельца из контекста (безопасность!)
@@ -51,41 +55,41 @@ func (s *TaskService) CreateTask(ctx context.Context, req *models.CreateTaskRequ
 	}
 
 	// 4. Асинхронно отправляем аудит
-	s.sendAuditMessage(ctx, models.ActionCreate, userID, task.ID, nil, task, nil)
+	s.sendAuditMessage(ctx, entity.ActionCreate, userID, task.ID, nil, task, nil)
 
 	return task, nil
 }
 
-func (s *TaskService) GetTask(ctx context.Context, taskID int, userID int) (*models.Task, error) {
+func (s *TaskService) GetTask(ctx context.Context, taskID int, userID int) (*entity.Task, error) {
 	task, err := s.taskRepo.GetByTaskId(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
 	if task == nil {
-		return nil, models.ErrTaskNotFound
+		return nil, entity.ErrTaskNotFound
 	}
 
 	// Проверяем права доступа
 	if task.OwnerId != userID {
-		return nil, models.ErrForbidden
+		return nil, entity.ErrForbidden
 	}
 
 	return task, nil
 }
 
-func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, req *models.UpdateTaskRequest) (*models.Task, error) {
+func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, req *entity.UpdateTaskRequest) (*entity.Task, error) {
 	// 1. Получаем текущую задачу
 	oldTask, err := s.taskRepo.GetByTaskId(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
 	if oldTask == nil {
-		return nil, models.ErrTaskNotFound
+		return nil, entity.ErrTaskNotFound
 	}
 
 	// 2. Проверяем права доступа
 	if oldTask.OwnerId != userID {
-		return nil, models.ErrForbidden
+		return nil, entity.ErrForbidden
 	}
 
 	// 3. Подготавливаем обновления
@@ -104,7 +108,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, re
 	}
 
 	if len(updates) == 0 {
-		return nil, models.ErrNoFieldsToUpdate
+		return nil, entity.ErrNoFieldsToUpdate
 	}
 
 	// 4. Обновляем задачу
@@ -114,7 +118,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, re
 	}
 
 	// 5. Асинхронно отправляем аудит
-	s.sendAuditMessage(ctx, models.ActionUpdate, userID, taskID, oldTask, updatedTask, updates)
+	s.sendAuditMessage(ctx, entity.ActionUpdate, userID, taskID, oldTask, updatedTask, updates)
 
 	return updatedTask, nil
 }
@@ -126,12 +130,12 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int, userID int) er
 		return err
 	}
 	if task == nil {
-		return models.ErrTaskNotFound
+		return entity.ErrTaskNotFound
 	}
 
 	// 2. Проверяем права доступа
 	if task.OwnerId != userID {
-		return models.ErrForbidden
+		return entity.ErrForbidden
 	}
 
 	// 3. Удаляем задачу
@@ -141,26 +145,26 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int, userID int) er
 	}
 
 	// 4. Асинхронно отправляем аудит
-	s.sendAuditMessage(ctx, models.ActionDelete, userID, taskID, task, nil, nil)
+	s.sendAuditMessage(ctx, entity.ActionDelete, userID, taskID, task, nil, nil)
 
 	return nil
 }
 
-func (s *TaskService) ListTasks(ctx context.Context, userID int, status string) ([]models.Task, error) {
+func (s *TaskService) ListTasks(ctx context.Context, userID int, status string) ([]entity.Task, error) {
 	return s.taskRepo.List(ctx, userID, status)
 }
 
 // Вспомогательный метод для отправки аудита
 func (s *TaskService) sendAuditMessage(
 	ctx context.Context,
-	action models.ActionType,
+	action entity.ActionType,
 	userID int,
 	taskID int,
-	oldTask *models.Task,
-	newTask *models.Task,
+	oldTask *entity.Task,
+	newTask *entity.Task,
 	updates map[string]interface{},
 ) {
-	auditMsg := &models.AuditMessage{
+	auditMsg := &entity.AuditMessage{
 		Action:    action,
 		UserID:    userID,
 		EntityID:  taskID,
@@ -169,7 +173,7 @@ func (s *TaskService) sendAuditMessage(
 
 	// Заполняем данные в зависимости от действия
 	switch action {
-	case models.ActionCreate:
+	case entity.ActionCreate:
 		if newTask != nil {
 			auditMsg.NewValues = map[string]interface{}{
 				"title":       newTask.Title,
@@ -179,7 +183,7 @@ func (s *TaskService) sendAuditMessage(
 			}
 		}
 
-	case models.ActionUpdate:
+	case entity.ActionUpdate:
 		if oldTask != nil && newTask != nil {
 			auditMsg.OldValues = map[string]interface{}{
 				"title":       oldTask.Title,
@@ -205,7 +209,7 @@ func (s *TaskService) sendAuditMessage(
 			auditMsg.Changes = changes
 		}
 
-	case models.ActionDelete:
+	case entity.ActionDelete:
 		if oldTask != nil {
 			auditMsg.OldValues = map[string]interface{}{
 				"title":       oldTask.Title,
