@@ -117,10 +117,22 @@ func main() {
 		}
 	}()
 
+	// Запускаем загрузку аватарок после инициализации сервера
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Даем серверу время на инициализацию
+		time.Sleep(2 * time.Second)
+		fmt.Println("\n Начинаем загрузку аватарок для пользователей...")
+		if err := usecase.UploadAllAvatars(context.Background(), userService); err != nil {
+			log.Printf("⚠️  Ошибка при загрузке аватарок: %v", err)
+		}
+	}()
+
 	fmt.Println("✅ gRPC сервис и Gateway готовы к работе!")
-	fmt.Println("📌 gRPC Gateway: http://localhost:8080/task.v1.TaskService/CreateTask")
-	fmt.Println("📌 gRPC Gateway: http://localhost:8080/user.v1.UserService/CreateUser")
-	fmt.Println("🔌 gRPC сервер: localhost:9090")
+	fmt.Println(" gRPC Gateway: http://localhost:8080/task.v1.TaskService/CreateTask")
+	fmt.Println(" gRPC Gateway: http://localhost:8080/user.v1.UserService/CreateUser")
+	fmt.Println(" gRPC сервер: localhost:9090")
 	fmt.Println("RabbitMQ Management: http://localhost:15672")
 	fmt.Println("Audit Worker запущен и ожидает сообщения...")
 	fmt.Println("Непрерывная генерация задач запущена...")

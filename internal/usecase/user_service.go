@@ -277,3 +277,9 @@ func (s *UserService) DownloadAvatarStream(ctx context.Context, userID int, chun
 
 	return dataChan, errChan
 }
+
+// HasAvatar проверяет, есть ли аватарка у пользователя
+func (s *UserService) HasAvatar(ctx context.Context, userID int) bool {
+	avatar, err := s.avatarRepo.GetByUserId(ctx, userID)
+	return err == nil && avatar != nil
+}
