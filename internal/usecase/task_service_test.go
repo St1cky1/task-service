@@ -59,6 +59,9 @@ func (m *MockTaskRepository) List(ctx context.Context, ownerID int, status strin
 type MockUserRepository struct {
 	GetByIdFunc func(ctx context.Context, id int) (*entity.User, error)
 	CreateFunc  func(ctx context.Context, user *entity.CreateUserRequest) (*entity.User, error)
+	UpdateFunc  func(ctx context.Context, id int, updates map[string]interface{}) (*entity.User, error)
+	ListFunc    func(ctx context.Context) ([]entity.User, error)
+	DeleteFunc  func(ctx context.Context, id int) error
 }
 
 var _ repository.IUserRepository = (*MockUserRepository)(nil)
@@ -75,6 +78,27 @@ func (m *MockUserRepository) Create(ctx context.Context, user *entity.CreateUser
 		return m.CreateFunc(ctx, user)
 	}
 	return nil, nil
+}
+
+func (m *MockUserRepository) Update(ctx context.Context, id int, updates map[string]interface{}) (*entity.User, error) {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, id, updates)
+	}
+	return nil, nil
+}
+
+func (m *MockUserRepository) List(ctx context.Context) ([]entity.User, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	return nil, nil
+}
+
+func (m *MockUserRepository) Delete(ctx context.Context, id int) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, id)
+	}
+	return nil
 }
 
 // MockTaskAuditRepository - мок для ITaskAuditRepository

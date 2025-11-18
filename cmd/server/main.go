@@ -107,31 +107,20 @@ func main() {
 		}
 	}()
 
-	// Запускаем HTTP Gateway
-	gatewayCtx := context.Background()
-	gatewayHandler, err := grpcapi.NewGatewayHandler(gatewayCtx, "localhost:9090")
-	if err != nil {
-		log.Fatal("❌ Failed to create gateway:", err)
-	}
-
-	gatewayServer := &http.Server{
-		Addr:         ":8080",
-		Handler:      gatewayHandler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
+	// Запускаем gRPC Gateway (HTTP->gRPC трансляция)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		fmt.Println("Запуск gRPC Gateway на порту 8080...")
-		if err := gatewayServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("❌ HTTP Gateway error: %v", err)
+		if err := grpcServer.StartGateway(context.Background(), "9090", "8080"); err != nil && err != http.ErrServerClosed {
+			log.Printf("❌ gRPC Gateway error: %v", err)
 		}
 	}()
 
-	fmt.Println("✅ gRPC сервис и REST Gateway готовы к работе!")
+	fmt.Println("✅ gRPC сервис и Gateway готовы к работе!")
+	fmt.Println("📌 gRPC Gateway: http://localhost:8080/task.v1.TaskService/CreateTask")
+	fmt.Println("📌 gRPC Gateway: http://localhost:8080/user.v1.UserService/CreateUser")
+	fmt.Println("🔌 gRPC сервер: localhost:9090")
 	fmt.Println("RabbitMQ Management: http://localhost:15672")
 	fmt.Println("Audit Worker запущен и ожидает сообщения...")
 	fmt.Println("Непрерывная генерация задач запущена...")
