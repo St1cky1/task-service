@@ -7,6 +7,36 @@ import "google/api/annotations.proto";
 option go_package = "github.com/St1cky1/task-service/proto/pb";
 
 service UserService {
+  // Auth endpoints
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/register"
+      body: "*"
+    };
+  }
+  
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/login"
+      body: "*"
+    };
+  }
+  
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/refresh"
+      body: "*"
+    };
+  }
+  
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/logout"
+      body: "*"
+    };
+  }
+
+  // User endpoints
   rpc CreateUser(CreateUserRequest) returns (UserResponse) {
     option (google.api.http) = {
       post: "/api/v1/users"
@@ -44,6 +74,7 @@ service UserService {
   rpc DownloadAvatar(DownloadAvatarRequest) returns (stream DownloadAvatarResponse);
 }
 
+// User messages
 message CreateUserRequest {
   string name = 1;
 }
@@ -78,9 +109,54 @@ message ListUsersResponse {
 message UserResponse {
   int32 id = 1;
   string name = 2;
-  string avatar_url = 3;
-  string created_at = 4;
-  string updated_at = 5;
+  string email = 3;
+  string avatar_url = 4;
+  bool is_active = 5;
+  string last_login = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+// Auth messages
+message RegisterRequest {
+  string name = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  UserResponse user = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+}
+
+message RegisterResponse {
+  UserResponse user = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message LogoutRequest {
+  int32 user_id = 1;
+}
+
+message LogoutResponse {
+  bool success = 1;
+  string message = 2;
 }
 
 message UploadAvatarRequest {
