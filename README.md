@@ -14,6 +14,12 @@ rabbitmq, postgre с docker hub'а подтянул образы
 
 grpс gateway вместо http 
 
+авторизация 
+jwt
 
-запуск приложения: godotenv -f .env go run cmd/server/main.go
+makefile 
+
+запуск приложения: 
+make docker-up
+make dev-run
 
