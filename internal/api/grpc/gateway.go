@@ -17,14 +17,16 @@ type Server struct {
 	grpcServer  *grpc.Server
 	taskService *usecase.TaskService
 	userService *usecase.UserService
+	authService *usecase.AuthService
 }
 
 // NewGRPCServer создает новый gRPC сервер
-func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserService) *Server {
+func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserService, authService *usecase.AuthService) *Server {
 	return &Server{
 		grpcServer:  grpc.NewServer(),
 		taskService: taskService,
 		userService: userService,
+		authService: authService,
 	}
 }
 
@@ -40,7 +42,7 @@ func (s *Server) Start(port string) error {
 	pb.RegisterTaskServiceServer(s.grpcServer, taskHandler)
 
 	// Регистрируем UserService
-	userHandler := NewUserServiceServer(s.userService)
+	userHandler := NewUserServiceServer(s.userService, s.authService)
 	pb.RegisterUserServiceServer(s.grpcServer, userHandler)
 
 	return s.grpcServer.Serve(listener)

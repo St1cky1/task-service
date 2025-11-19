@@ -13,6 +13,7 @@ import (
 
 	grpcapi "github.com/St1cky1/task-service/internal/api/grpc"
 	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/auth"
 	"github.com/St1cky1/task-service/internal/infrastructure/client"
 	"github.com/St1cky1/task-service/internal/infrastructure/worker"
 	"github.com/St1cky1/task-service/internal/repository"
@@ -69,10 +70,16 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	taskAuditRepo := repository.NewTaskAuditRepository(db)
 	avatarRepo := repository.NewAvatarRepository(db)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+
+	// Инициализируем auth компоненты
+	passwordManager := auth.NewPasswordManager()
+	jwtManager := auth.NewJWTManager()
 
 	// Инициализируем сервисы
 	taskService := usecase.NewTaskService(taskRepo, userRepo, taskAuditRepo, rabbitMQ)
-	userService := usecase.NewUserService(userRepo, avatarRepo)
+	userService := usecase.NewUserService(userRepo, avatarRepo, passwordManager, jwtManager, refreshTokenRepo)
+	authService := usecase.NewAuthService(userRepo, refreshTokenRepo, passwordManager, jwtManager)
 
 	// Запускаем воркер для обработки аудит-сообщений
 	auditWorker := worker.NewAuditWorker(rabbitMQ, taskAuditRepo)
@@ -95,13 +102,13 @@ func main() {
 		continuousTaskGeneration(taskGenCtx, taskService, userRepo)
 	}()
 
-	// Запускаем gRPC сервер с обоими сервисами (Task и User)
-	grpcServer := grpcapi.NewGRPCServer(taskService, userService)
+	// Запускаем gRPC сервер со всеми сервисами (Task, User, Auth)
+	grpcServer := grpcapi.NewGRPCServer(taskService, userService, authService)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		fmt.Println("Запуск gRPC сервера на порту 9090...")
-		fmt.Println("📋 TaskService и UserService готовы к работе!")
+		fmt.Println("📋 TaskService, UserService и AuthService готовы к работе!")
 		if err := grpcServer.Start("9090"); err != nil {
 			log.Printf("❌ gRPC server error: %v", err)
 		}
@@ -117,40 +124,33 @@ func main() {
 		}
 	}()
 
-	// Запускаем загрузку аватарок после инициализации сервера
+	// Запускаем непрерывную генерацию пользователей с аватарками
+	userGenCtx, userGenCancel := context.WithCancel(context.Background())
+	defer userGenCancel()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		// Даем серверу время на инициализацию
 		time.Sleep(2 * time.Second)
-		fmt.Println("\n Начинаем загрузку аватарок для пользователей...")
-		if err := usecase.UploadAllAvatars(context.Background(), userService); err != nil {
-			log.Printf("⚠️  Ошибка при загрузке аватарок: %v", err)
+		fmt.Println("\n👥 Начинаем генерацию пользователей с аватарками...")
+		if err := usecase.ContinuousUserGenerationWithAvatars(userGenCtx, userService); err != nil {
+			log.Printf("⚠️  Ошибка при генерации пользователей: %v", err)
 		}
 	}()
 
-	fmt.Println("✅ gRPC сервис и Gateway готовы к работе!")
-	fmt.Println(" gRPC Gateway: http://localhost:8080/task.v1.TaskService/CreateTask")
-	fmt.Println(" gRPC Gateway: http://localhost:8080/user.v1.UserService/CreateUser")
-	fmt.Println(" gRPC сервер: localhost:9090")
 	fmt.Println("RabbitMQ Management: http://localhost:15672")
+	fmt.Println("gRPC сервер: localhost:9090")
 	fmt.Println("Audit Worker запущен и ожидает сообщения...")
 	fmt.Println("Непрерывная генерация задач запущена...")
+	fmt.Println("Генерация пользователей с аватарками запущена...")
 	fmt.Println("Для остановки нажмите Ctrl+C")
 
 	// Ждем сигнал завершения
-	waitForShutdown(workerCancel, taskGenCancel)
+	waitForShutdown(workerCancel, taskGenCancel, userGenCancel)
 }
 
-// Непрерывная генерация задач
+// Непрерывная генерация задач для всех пользователей
 func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskService, userRepo repository.IUserRepository) {
-	// Сначала создаем тестового пользователя
-	user := createOrGetTestUser(ctx, userRepo)
-	if user == nil {
-		log.Println("❌ Не удалось создать тестового пользователя")
-		return
-	}
-
 	taskCounter := 0
 	statuses := []entity.TaskStatus{
 		entity.StatusPending,
@@ -165,7 +165,23 @@ func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskServ
 			fmt.Println("🛑 Генерация задач остановлена")
 			return
 		case <-time.After(5 * time.Second): // Генерируем задачу каждые 5 секунд
+			// Получаем всех активных пользователей
+			users, err := userRepo.List(ctx)
+			if err != nil {
+				log.Printf("❌ Ошибка получения пользователей: %v", err)
+				continue
+			}
+
+			if len(users) == 0 {
+				log.Println("⏳ Пользователей еще нет, ожидаем создания...")
+				continue
+			}
+
 			taskCounter++
+
+			// Распределяем задачи между пользователями
+			userIdx := (taskCounter - 1) % len(users)
+			user := users[userIdx]
 
 			// Случайный статус
 			status := statuses[taskCounter%len(statuses)]
@@ -180,12 +196,12 @@ func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskServ
 
 			task, err := taskService.CreateTask(ctx, taskReq, user.ID)
 			if err != nil {
-				log.Printf("❌ Ошибка создания авто-задачи: %v", err)
+				log.Printf("❌ Ошибка создания авто-задачи для user %d: %v", user.ID, err)
 				continue
 			}
 
-			fmt.Printf("✅ Создана авто-задача: ID=%d, Title=%s, Status=%s\n",
-				task.ID, task.Title, task.Status)
+			fmt.Printf("✅ Создана авто-задача: ID=%d, Title=%s, User=%d, Status=%s\n",
+				task.ID, task.Title, user.ID, task.Status)
 
 			// Случайно обновляем или удаляем каждую 3-ю задачу
 			if taskCounter%3 == 0 {
@@ -199,7 +215,7 @@ func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskServ
 				if err != nil {
 					log.Printf("❌ Ошибка обновления авто-задачи: %v", err)
 				} else {
-					fmt.Printf("Обновлена авто-задача: %s (%s)\n", updatedTask.Title, updatedTask.Status)
+					fmt.Printf("📝 Обновлена авто-задача: %s (%s)\n", updatedTask.Title, updatedTask.Status)
 				}
 			}
 
@@ -209,51 +225,27 @@ func continuousTaskGeneration(ctx context.Context, taskService *usecase.TaskServ
 				if err != nil {
 					log.Printf("❌ Ошибка удаления авто-задачи: %v", err)
 				} else {
-					fmt.Printf("Удалена авто-задача: ID=%d\n", task.ID)
+					fmt.Printf("🗑️  Удалена авто-задача: ID=%d\n", task.ID)
 				}
 			}
 
 			// Показываем статистику каждые 10 задач
 			if taskCounter%10 == 0 {
-				tasks, err := taskService.ListTasks(ctx, user.ID, "")
-				if err != nil {
-					log.Printf("❌ Ошибка получения списка задач: %v", err)
-				} else {
-					fmt.Printf("Статистика: создано %d задач, в БД: %d задач\n",
-						taskCounter, len(tasks))
+				totalTasks := 0
+				for _, u := range users {
+					tasks, err := taskService.ListTasks(ctx, u.ID, "")
+					if err == nil {
+						totalTasks += len(tasks)
+					}
 				}
+				fmt.Printf("📊 Статистика: создано %d задач, активных пользователей: %d, всего задач в БД: %d\n",
+					taskCounter, len(users), totalTasks)
 			}
 		}
 	}
 }
 
-// Создает или получает тестового пользователя
-func createOrGetTestUser(ctx context.Context, userRepo repository.IUserRepository) *entity.User {
-	// Пробуем получить пользователя с ID=1
-	user, err := userRepo.GetById(ctx, 1)
-	if err != nil {
-		log.Printf("❌ Ошибка получения пользователя: %v", err)
-		return nil
-	}
-
-	if user != nil {
-		fmt.Printf("✅ Найден существующий пользователь: ID=%d, Name=%s\n", user.ID, user.Name)
-		return user
-	}
-
-	// Создаем нового пользователя
-	userReq := &entity.CreateUserRequest{Name: "Auto-Generated User"}
-	user, err = userRepo.Create(ctx, userReq)
-	if err != nil {
-		log.Printf("❌ Ошибка создания пользователя: %v", err)
-		return nil
-	}
-
-	fmt.Printf("✅ Создан новый пользователь: ID=%d, Name=%s\n", user.ID, user.Name)
-	return user
-}
-
-func waitForShutdown(workerCancel context.CancelFunc, taskGenCancel context.CancelFunc) {
+func waitForShutdown(workerCancel, taskGenCancel, userGenCancel context.CancelFunc) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -262,9 +254,10 @@ func waitForShutdown(workerCancel context.CancelFunc, taskGenCancel context.Canc
 
 	fmt.Println("Завершение работы...")
 
-	// Останавливаем воркер и генератор задач
+	// Останавливаем воркер и генераторы
 	workerCancel()
 	taskGenCancel()
+	userGenCancel()
 
 	// Даем время для graceful shutdown
 	time.Sleep(2 * time.Second)

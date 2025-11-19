@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/St1cky1/task-service/internal/entity"
 )
@@ -19,6 +20,8 @@ type ITaskRepository interface {
 type IUserRepository interface {
 	Create(ctx context.Context, user *entity.CreateUserRequest) (*entity.User, error)
 	GetById(ctx context.Context, id int) (*entity.User, error)
+	GetByEmail(ctx context.Context, email string) (*entity.User, error)
+	CreateWithAuth(ctx context.Context, name, email, passwordHash string) (*entity.User, error)
 	Update(ctx context.Context, id int, updates map[string]interface{}) (*entity.User, error)
 	List(ctx context.Context) ([]entity.User, error)
 	Delete(ctx context.Context, id int) error
@@ -35,4 +38,14 @@ type IAvatarRepository interface {
 type ITaskAuditRepository interface {
 	Create(ctx context.Context, audit *entity.TaskAudit) error
 	GetByTaskAuditId(ctx context.Context, taskAuditId int) ([]entity.TaskAudit, error)
+}
+
+// IRefreshTokenRepository - интерфейс для RefreshTokenRepository
+type IRefreshTokenRepository interface {
+	Save(ctx context.Context, userID int, tokenHash string, expiresAt time.Time) error
+	GetByUserID(ctx context.Context, userID int) ([]RefreshToken, error)
+	GetByHash(ctx context.Context, tokenHash string) (*RefreshToken, error)
+	RevokeAll(ctx context.Context, userID int) error
+	Revoke(ctx context.Context, tokenHash string) error
+	CleanupExpired(ctx context.Context) error
 }

@@ -15,12 +15,14 @@ import (
 type UserServiceServer struct {
 	pb.UnimplementedUserServiceServer
 	userService *usecase.UserService
+	authService *usecase.AuthService
 }
 
 // NewUserServiceServer создает новый UserServiceServer
-func NewUserServiceServer(userService *usecase.UserService) *UserServiceServer {
+func NewUserServiceServer(userService *usecase.UserService, authService *usecase.AuthService) *UserServiceServer {
 	return &UserServiceServer{
 		userService: userService,
+		authService: authService,
 	}
 }
 

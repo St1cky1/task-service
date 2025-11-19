@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -9,21 +11,31 @@ import (
 	"time"
 
 	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/auth"
 	"github.com/St1cky1/task-service/internal/repository"
 )
 
 type UserService struct {
-	userRepo   repository.IUserRepository
-	avatarRepo repository.IAvatarRepository
+	userRepo         repository.IUserRepository
+	avatarRepo       repository.IAvatarRepository
+	passwordManager  *auth.PasswordManager
+	jwtManager       *auth.JWTManager
+	refreshTokenRepo repository.IRefreshTokenRepository
 }
 
 func NewUserService(
 	userRepo repository.IUserRepository,
 	avatarRepo repository.IAvatarRepository,
+	passwordManager *auth.PasswordManager,
+	jwtManager *auth.JWTManager,
+	refreshTokenRepo repository.IRefreshTokenRepository,
 ) *UserService {
 	return &UserService{
-		userRepo:   userRepo,
-		avatarRepo: avatarRepo,
+		userRepo:         userRepo,
+		avatarRepo:       avatarRepo,
+		passwordManager:  passwordManager,
+		jwtManager:       jwtManager,
+		refreshTokenRepo: refreshTokenRepo,
 	}
 }
 
@@ -282,4 +294,49 @@ func (s *UserService) DownloadAvatarStream(ctx context.Context, userID int, chun
 func (s *UserService) HasAvatar(ctx context.Context, userID int) bool {
 	avatar, err := s.avatarRepo.GetByUserId(ctx, userID)
 	return err == nil && avatar != nil
+}
+
+// CreateUserWithAvatar создает нового пользователя с email, паролем и аватаркой
+// Также генерирует refresh token и сохраняет его в БД
+func (s *UserService) CreateUserWithAvatar(ctx context.Context, name, email, password string, imageData []byte) (*entity.User, error) {
+	// Хешируем пароль
+	passwordHash, err := s.passwordManager.HashPassword(password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Создаем пользователя с auth
+	user, err := s.userRepo.CreateWithAuth(ctx, name, email, passwordHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Загружаем аватарку для пользователя
+	_, err = s.UploadAvatar(ctx, user.ID, imageData, "image/jpeg")
+	if err != nil {
+		// Если аватарка не загрузилась, все равно возвращаем пользователя
+		// но логируем ошибку
+		fmt.Printf("⚠️  Warning: Avatar upload failed for user %d: %v\n", user.ID, err)
+	}
+
+	// Генерируем и сохраняем refresh token
+	refreshToken, err := s.jwtManager.GenerateRefreshToken(user.ID, email)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: Failed to generate refresh token for user %d: %v\n", user.ID, err)
+	} else {
+		refreshTokenHash := hashToken(refreshToken)
+		expiresAt := time.Now().Add(7 * 24 * time.Hour)
+		err = s.refreshTokenRepo.Save(ctx, user.ID, refreshTokenHash, expiresAt)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Failed to save refresh token for user %d: %v\n", user.ID, err)
+		}
+	}
+
+	return user, nil
+}
+
+// hashToken генерирует хеш токена для хранения в БД
+func hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
 }
