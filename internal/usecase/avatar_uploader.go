@@ -78,7 +78,7 @@ func ContinuousUserGenerationWithAvatars(ctx context.Context, userService *UserS
 			// Запускаем создание пользователя в горутине
 			go func(userNum int, imgIdx int, sid int64) {
 				// Генерируем пароль
-				password := generateRandomPassword(12)
+				password := GenerateRandomPassword(12)
 
 				// Генерируем email и имя с уникальным sessionID
 				email := fmt.Sprintf("auto_user_%d_%d@task-service.local", sid, userNum)
@@ -108,8 +108,8 @@ func ContinuousUserGenerationWithAvatars(ctx context.Context, userService *UserS
 	}
 }
 
-// generateRandomPassword генерирует случайный пароль указанной длины
-func generateRandomPassword(length int) string {
+// GenerateRandomPassword генерирует случайный пароль указанной длины
+func GenerateRandomPassword(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
 	seed := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -140,8 +140,8 @@ func loadAvatarImages() ([][]byte, error) {
 	return images, nil
 }
 
-// uploadUserAvatar загружает аватарку для одного пользователя
-func uploadUserAvatar(ctx context.Context, userService *UserService, userID int, imageData []byte) error {
+// UploadUserAvatar загружает аватарку для одного пользователя
+func UploadUserAvatar(ctx context.Context, userService *UserService, userID int, imageData []byte) error {
 	_, err := userService.UploadAvatar(ctx, userID, imageData, "image/jpeg")
 	if err != nil {
 		return fmt.Errorf("ошибка загрузки аватарки: %w", err)
