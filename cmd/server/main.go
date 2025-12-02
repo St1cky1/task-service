@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,6 +17,7 @@ import (
 	"github.com/St1cky1/task-service/internal/entity"
 	"github.com/St1cky1/task-service/internal/infrastructure/auth"
 	"github.com/St1cky1/task-service/internal/infrastructure/client"
+	"github.com/St1cky1/task-service/internal/infrastructure/metrics"
 	"github.com/St1cky1/task-service/internal/infrastructure/worker"
 	"github.com/St1cky1/task-service/internal/repository"
 	"github.com/St1cky1/task-service/internal/usecase"
@@ -57,6 +60,9 @@ func main() {
 	}
 	fmt.Println("✅ Подключение к БД установлено")
 
+	// Инициализируем мониторинг метрик БД
+	metrics.InitDBMetrics(db)
+
 	// Подключаемся к RabbitMQ
 	rabbitMQ, err := client.NewRabbitMQClient(rabbitMQURL)
 	if err != nil {
@@ -80,6 +86,21 @@ func main() {
 	taskService := usecase.NewTaskService(taskRepo, userRepo, taskAuditRepo, rabbitMQ)
 	userService := usecase.NewUserService(userRepo, avatarRepo, passwordManager, jwtManager, refreshTokenRepo)
 	authService := usecase.NewAuthService(userRepo, refreshTokenRepo, passwordManager, jwtManager)
+
+	// Запускаем pprof профилировщик на порту 6060
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Println("🔍 Запуск pprof сервера профилирования на порту 6060...")
+		listener, err := net.Listen("tcp", ":6060")
+		if err != nil {
+			log.Printf("❌ Ошибка при создании listener для pprof: %v", err)
+			return
+		}
+		if err := http.Serve(listener, nil); err != nil && err != http.ErrServerClosed {
+			log.Printf("❌ pprof сервер ошибка: %v", err)
+		}
+	}()
 
 	// Запускаем воркер для обработки аудит-сообщений
 	auditWorker := worker.NewAuditWorker(rabbitMQ, taskAuditRepo)
@@ -138,12 +159,16 @@ func main() {
 		}
 	}()
 
-	fmt.Println("RabbitMQ Management: http://localhost:15672")
-	fmt.Println("gRPC сервер: localhost:9090")
-	fmt.Println("Audit Worker запущен и ожидает сообщения...")
-	fmt.Println("Непрерывная генерация задач запущена...")
-	fmt.Println("Генерация пользователей с аватарками запущена...")
-	fmt.Println("Для остановки нажмите Ctrl+C")
+	fmt.Println("\n Доступные сервисы:")
+	fmt.Println("  gRPC сервер: localhost:9090")
+	fmt.Println("  REST Gateway: http://localhost:8080")
+	fmt.Println("  🔍 pprof Профилирование: http://localhost:6060/debug/pprof/")
+	fmt.Println("  RabbitMQ Management: http://localhost:15672")
+	fmt.Println("\n Процессы:")
+	fmt.Println("  Audit Worker запущен и ожидает сообщения...")
+	fmt.Println("  Непрерывная генерация задач запущена...")
+	fmt.Println("  Генерация пользователей с аватарками запущена...")
+	fmt.Println("\nДля остановки нажмите Ctrl+C")
 
 	// Ждем сигнал завершения
 	waitForShutdown(workerCancel, taskGenCancel, userGenCancel)
