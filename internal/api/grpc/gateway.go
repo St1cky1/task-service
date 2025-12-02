@@ -5,9 +5,11 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/St1cky1/task-service/internal/infrastructure/metrics"
 	"github.com/St1cky1/task-service/internal/usecase"
 	pb "github.com/St1cky1/task-service/proto/pb"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -23,7 +25,10 @@ type Server struct {
 // NewGRPCServer создает новый gRPC сервер
 func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserService, authService *usecase.AuthService) *Server {
 	return &Server{
-		grpcServer:  grpc.NewServer(),
+		grpcServer: grpc.NewServer(
+			grpc.UnaryInterceptor(metrics.UnaryServerInterceptor),
+			grpc.StreamInterceptor(metrics.StreamServerInterceptor),
+		),
 		taskService: taskService,
 		userService: userService,
 		authService: authService,
@@ -69,10 +74,15 @@ func (s *Server) StartGateway(ctx context.Context, grpcPort, gatewayPort string)
 		return err
 	}
 
+	// Создаем новый router с middleware и metrics endpoint
+	httpMux := http.NewServeMux()
+	httpMux.Handle("/metrics", promhttp.Handler())
+	httpMux.Handle("/", metrics.HTTPMiddleware(mux))
+
 	// Запускаем HTTP сервер
 	server := &http.Server{
 		Addr:    ":" + gatewayPort,
-		Handler: mux,
+		Handler: httpMux,
 	}
 
 	return server.ListenAndServe()

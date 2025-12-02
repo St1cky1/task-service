@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/metrics"
 	"github.com/St1cky1/task-service/internal/repository"
 )
 
@@ -39,6 +40,7 @@ func (s *TaskService) CreateTask(ctx context.Context, req *entity.CreateTaskRequ
 	// 1. Проверяем что пользователь существует
 	user, err := s.userRepo.GetById(ctx, userID)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return nil, err
 	}
 	if user == nil {
@@ -51,8 +53,13 @@ func (s *TaskService) CreateTask(ctx context.Context, req *entity.CreateTaskRequ
 	// 3. Создаем задачу
 	task, err := s.taskRepo.Create(ctx, req)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return nil, err
 	}
+
+	// Увеличиваем счетчик созданных задач
+	metrics.GetMetrics().TasksCreated.Inc()
+	metrics.GetMetrics().TasksProcessed.Inc()
 
 	// 4. Асинхронно отправляем аудит
 	s.sendAuditMessage(ctx, entity.ActionCreate, userID, task.ID, nil, task, nil)
@@ -81,6 +88,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, re
 	// 1. Получаем текущую задачу
 	oldTask, err := s.taskRepo.GetByTaskId(ctx, taskID)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return nil, err
 	}
 	if oldTask == nil {
@@ -114,8 +122,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int, userID int, re
 	// 4. Обновляем задачу
 	updatedTask, err := s.taskRepo.Update(ctx, taskID, updates)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return nil, err
 	}
+
+	// Увеличиваем счетчик обновленных задач
+	metrics.GetMetrics().TasksUpdated.Inc()
+	metrics.GetMetrics().TasksProcessed.Inc()
 
 	// 5. Асинхронно отправляем аудит
 	s.sendAuditMessage(ctx, entity.ActionUpdate, userID, taskID, oldTask, updatedTask, updates)
@@ -127,6 +140,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int, userID int) er
 	// 1. Получаем задачу (для аудита и проверки прав)
 	task, err := s.taskRepo.GetByTaskId(ctx, taskID)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return err
 	}
 	if task == nil {
@@ -141,8 +155,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int, userID int) er
 	// 3. Удаляем задачу
 	err = s.taskRepo.Delete(ctx, taskID)
 	if err != nil {
+		metrics.GetMetrics().DBErrors.Inc()
 		return err
 	}
+
+	// Увеличиваем счетчик удаленных задач
+	metrics.GetMetrics().TasksDeleted.Inc()
+	metrics.GetMetrics().TasksProcessed.Inc()
 
 	// 4. Асинхронно отправляем аудит
 	s.sendAuditMessage(ctx, entity.ActionDelete, userID, taskID, task, nil, nil)

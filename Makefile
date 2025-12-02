@@ -12,7 +12,7 @@ help: ## Показать справку по командам
 build: ## Собрать приложение
 	@echo "Сборка $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@godotenv -f .env go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "✓ Приложение собрано в $(BUILD_DIR)/$(BINARY_NAME)"
 
 run: build ## Запустить приложение (сначала собирает)
