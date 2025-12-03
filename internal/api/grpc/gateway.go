@@ -77,7 +77,7 @@ func (s *Server) StartGateway(ctx context.Context, grpcPort, gatewayPort string)
 	// Создаем новый router с middleware и metrics endpoint
 	httpMux := http.NewServeMux()
 	httpMux.Handle("/metrics", promhttp.Handler())
-	httpMux.Handle("/", metrics.HTTPMiddleware(mux))
+	httpMux.Handle("/", metrics.HTTPMiddleware(corsMiddleware(mux)))
 
 	// Запускаем HTTP сервер
 	server := &http.Server{
@@ -86,4 +86,21 @@ func (s *Server) StartGateway(ctx context.Context, grpcPort, gatewayPort string)
 	}
 
 	return server.ListenAndServe()
+}
+
+// corsMiddleware добавляет CORS headers для REST клиентов (включая Flutter)
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
