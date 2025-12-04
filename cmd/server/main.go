@@ -128,9 +128,9 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fmt.Println("Запуск gRPC сервера на порту 9090...")
+		fmt.Println("Запуск gRPC сервера на порту 5000...")
 		fmt.Println("📋 TaskService, UserService и AuthService готовы к работе!")
-		if err := grpcServer.Start("9090"); err != nil {
+		if err := grpcServer.Start("5000"); err != nil {
 			log.Printf("❌ gRPC server error: %v", err)
 		}
 	}()
@@ -140,7 +140,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		fmt.Println("Запуск gRPC Gateway на порту 8080...")
-		if err := grpcServer.StartGateway(context.Background(), "9090", "8080"); err != nil && err != http.ErrServerClosed {
+		if err := grpcServer.StartGateway(context.Background(), "5000", "8080"); err != nil && err != http.ErrServerClosed {
 			log.Printf("❌ gRPC Gateway error: %v", err)
 		}
 	}()
@@ -160,10 +160,11 @@ func main() {
 	}()
 
 	fmt.Println("\n Доступные сервисы:")
-	fmt.Println("  gRPC сервер: localhost:9090")
+	fmt.Println("  gRPC сервер: localhost:5000")
 	fmt.Println("  REST Gateway: http://localhost:8080")
 	fmt.Println("  🔍 pprof Профилирование: http://localhost:6060/debug/pprof/")
 	fmt.Println("  RabbitMQ Management: http://localhost:15672")
+	fmt.Println("  Prometheus: http://localhost:9090")
 	fmt.Println("\n Процессы:")
 	fmt.Println("  Audit Worker запущен и ожидает сообщения...")
 	fmt.Println("  Непрерывная генерация задач запущена...")
