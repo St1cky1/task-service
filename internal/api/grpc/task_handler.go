@@ -2,11 +2,15 @@ package grpc
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/St1cky1/task-service/internal/entity"
+	"github.com/St1cky1/task-service/internal/infrastructure/auth"
 	"github.com/St1cky1/task-service/internal/usecase"
 	pb "github.com/St1cky1/task-service/proto/pb"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -14,13 +18,41 @@ import (
 type TaskServiceServer struct {
 	pb.UnimplementedTaskServiceServer
 	taskService *usecase.TaskService
+	jwtManager  *auth.JWTManager
 }
 
 // NewTaskServiceServer создает новый TaskServiceServer
-func NewTaskServiceServer(taskService *usecase.TaskService) *TaskServiceServer {
+func NewTaskServiceServer(taskService *usecase.TaskService, jwtManager *auth.JWTManager) *TaskServiceServer {
 	return &TaskServiceServer{
 		taskService: taskService,
+		jwtManager:  jwtManager,
 	}
+}
+
+// extractUserIDFromContext извлекает userID из JWT токена в метаданных
+func (s *TaskServiceServer) extractUserIDFromContext(ctx context.Context) (int, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return 0, fmt.Errorf("no metadata found")
+	}
+
+	authHeaders := md.Get("authorization")
+	if len(authHeaders) == 0 {
+		return 0, fmt.Errorf("no authorization header")
+	}
+
+	authHeader := authHeaders[0]
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if token == authHeader {
+		return 0, fmt.Errorf("invalid authorization header format")
+	}
+
+	claims, err := s.jwtManager.ValidateAccessToken(token)
+	if err != nil {
+		return 0, fmt.Errorf("invalid token: %w", err)
+	}
+
+	return claims.UserID, nil
 }
 
 // CreateTask создает новую задачу
@@ -57,8 +89,12 @@ func (s *TaskServiceServer) CreateTask(ctx context.Context, req *pb.CreateTaskRe
 
 // GetTask получает задачу по ID
 func (s *TaskServiceServer) GetTask(ctx context.Context, req *pb.GetTaskRequest) (*pb.TaskResponse, error) {
-	// Для простоты используем первого пользователя
-	task, err := s.taskService.GetTask(ctx, int(req.Id), 1)
+	userID, err := s.extractUserIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	task, err := s.taskService.GetTask(ctx, int(req.Id), userID)
 	if err != nil {
 		switch err {
 		case entity.ErrTaskNotFound:
@@ -83,13 +119,18 @@ func (s *TaskServiceServer) GetTask(ctx context.Context, req *pb.GetTaskRequest)
 
 // UpdateTask обновляет задачу
 func (s *TaskServiceServer) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb.TaskResponse, error) {
+	userID, err := s.extractUserIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
 	updateReq := &entity.UpdateTaskRequest{
 		Title:       req.Title,
 		Status:      entity.TaskStatus(req.Status),
 		Description: req.Description,
 	}
 
-	task, err := s.taskService.UpdateTask(ctx, int(req.Id), 1, updateReq)
+	task, err := s.taskService.UpdateTask(ctx, int(req.Id), userID, updateReq)
 	if err != nil {
 		switch err {
 		case entity.ErrTaskNotFound:
@@ -116,7 +157,12 @@ func (s *TaskServiceServer) UpdateTask(ctx context.Context, req *pb.UpdateTaskRe
 
 // DeleteTask удаляет задачу
 func (s *TaskServiceServer) DeleteTask(ctx context.Context, req *pb.DeleteTaskRequest) (*pb.DeleteTaskResponse, error) {
-	err := s.taskService.DeleteTask(ctx, int(req.Id), 1)
+	userID, err := s.extractUserIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	err = s.taskService.DeleteTask(ctx, int(req.Id), userID)
 	if err != nil {
 		switch err {
 		case entity.ErrTaskNotFound:
@@ -133,7 +179,12 @@ func (s *TaskServiceServer) DeleteTask(ctx context.Context, req *pb.DeleteTaskRe
 
 // ListTasks получает список задач
 func (s *TaskServiceServer) ListTasks(ctx context.Context, req *pb.ListTasksRequest) (*pb.ListTasksResponse, error) {
-	tasks, err := s.taskService.ListTasks(ctx, 1, req.Status)
+	userID, err := s.extractUserIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	tasks, err := s.taskService.ListTasks(ctx, userID, req.Status)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

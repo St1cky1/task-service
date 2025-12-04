@@ -124,7 +124,7 @@ func main() {
 	}()
 
 	// Запускаем gRPC сервер со всеми сервисами (Task, User, Auth)
-	grpcServer := grpcapi.NewGRPCServer(taskService, userService, authService)
+	grpcServer := grpcapi.NewGRPCServer(taskService, userService, authService, jwtManager)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

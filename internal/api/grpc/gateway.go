@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/St1cky1/task-service/internal/infrastructure/auth"
 	"github.com/St1cky1/task-service/internal/infrastructure/metrics"
 	"github.com/St1cky1/task-service/internal/usecase"
 	pb "github.com/St1cky1/task-service/proto/pb"
@@ -20,10 +21,11 @@ type Server struct {
 	taskService *usecase.TaskService
 	userService *usecase.UserService
 	authService *usecase.AuthService
+	jwtManager  *auth.JWTManager
 }
 
 // NewGRPCServer создает новый gRPC сервер
-func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserService, authService *usecase.AuthService) *Server {
+func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserService, authService *usecase.AuthService, jwtManager *auth.JWTManager) *Server {
 	return &Server{
 		grpcServer: grpc.NewServer(
 			grpc.UnaryInterceptor(metrics.UnaryServerInterceptor),
@@ -32,6 +34,7 @@ func NewGRPCServer(taskService *usecase.TaskService, userService *usecase.UserSe
 		taskService: taskService,
 		userService: userService,
 		authService: authService,
+		jwtManager:  jwtManager,
 	}
 }
 
@@ -43,7 +46,7 @@ func (s *Server) Start(port string) error {
 	}
 
 	// Регистрируем TaskService
-	taskHandler := NewTaskServiceServer(s.taskService)
+	taskHandler := NewTaskServiceServer(s.taskService, s.jwtManager)
 	pb.RegisterTaskServiceServer(s.grpcServer, taskHandler)
 
 	// Регистрируем UserService
