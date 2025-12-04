@@ -37,15 +37,28 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	email := ""
+	if user.Email != nil {
+		email = *user.Email
+	}
+
 	avatarURL := ""
 	if user.AvatarURL != nil {
 		avatarURL = *user.AvatarURL
 	}
 
+	var lastLogin string
+	if user.LastLogin != nil {
+		lastLogin = user.LastLogin.Format("2006-01-02T15:04:05Z07:00")
+	}
+
 	return &pb.UserResponse{
 		Id:        int32(user.ID),
 		Name:      user.Name,
+		Email:     email,
 		AvatarUrl: avatarURL,
+		IsActive:  user.IsActive,
+		LastLogin: lastLogin,
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 	}, nil
@@ -63,15 +76,28 @@ func (s *UserServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
 		}
 	}
 
+	email := ""
+	if user.Email != nil {
+		email = *user.Email
+	}
+
 	avatarURL := ""
 	if user.AvatarURL != nil {
 		avatarURL = *user.AvatarURL
 	}
 
+	var lastLogin string
+	if user.LastLogin != nil {
+		lastLogin = user.LastLogin.Format("2006-01-02T15:04:05Z07:00")
+	}
+
 	return &pb.UserResponse{
 		Id:        int32(user.ID),
 		Name:      user.Name,
+		Email:     email,
 		AvatarUrl: avatarURL,
+		IsActive:  user.IsActive,
+		LastLogin: lastLogin,
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 	}, nil
@@ -93,15 +119,28 @@ func (s *UserServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 		}
 	}
 
+	email := ""
+	if user.Email != nil {
+		email = *user.Email
+	}
+
 	avatarURL := ""
 	if user.AvatarURL != nil {
 		avatarURL = *user.AvatarURL
 	}
 
+	var lastLogin string
+	if user.LastLogin != nil {
+		lastLogin = user.LastLogin.Format("2006-01-02T15:04:05Z07:00")
+	}
+
 	return &pb.UserResponse{
 		Id:        int32(user.ID),
 		Name:      user.Name,
+		Email:     email,
 		AvatarUrl: avatarURL,
+		IsActive:  user.IsActive,
+		LastLogin: lastLogin,
 		CreatedAt: user.CreatedAt.String(),
 		UpdatedAt: user.UpdatedAt.String(),
 	}, nil
@@ -131,15 +170,28 @@ func (s *UserServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 
 	pbUsers := make([]*pb.UserResponse, len(users))
 	for i, user := range users {
+		email := ""
+		if user.Email != nil {
+			email = *user.Email
+		}
+
 		avatarURL := ""
 		if user.AvatarURL != nil {
 			avatarURL = *user.AvatarURL
 		}
 
+		var lastLogin string
+		if user.LastLogin != nil {
+			lastLogin = user.LastLogin.Format("2006-01-02T15:04:05Z07:00")
+		}
+
 		pbUsers[i] = &pb.UserResponse{
 			Id:        int32(user.ID),
 			Name:      user.Name,
+			Email:     email,
 			AvatarUrl: avatarURL,
+			IsActive:  user.IsActive,
+			LastLogin: lastLogin,
 			CreatedAt: user.CreatedAt.String(),
 			UpdatedAt: user.UpdatedAt.String(),
 		}
